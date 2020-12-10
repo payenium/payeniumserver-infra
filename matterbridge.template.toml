@@ -1,0 +1,143 @@
+[irc.freenode]
+    Server="irc.freenode.net:6667"
+    Nick="{BOT_NICKNAME}"
+
+[mattermost.btcpay]
+    Server="{MATTERMOST_HOST}"
+    Team="btcpayserver"
+    Login="{BOT_NICKNAME}"
+    Password="{BOT_PASS}"
+    PrefixMessagesWithNick=true
+
+[slack.forkbitpay]
+	Token="{SLACK_TOKEN}"
+
+[telegram.btcpay]
+	Token="{TELEGRAM_TOKEN}"
+	
+[gitter.nbitcoin]
+	Token="{GITTER_TOKEN}"
+
+[general]
+RemoteNickFormat="[{PROTOCOL} - {NICK}]"
+
+[[gateway]]
+    name = "nbitcoin"
+    enable=true
+
+    [[gateway.inout]]
+    account = "gitter.nbitcoin"
+    channel="MetacoSA/NBitcoin"
+
+    [[gateway.inout]]
+    account ="slack.forkbitpay"
+    channel = "nbitcoin"    
+	
+    [[gateway.inout]]
+    account ="mattermost.btcpay"
+    channel = "nbitcoin"
+	
+[[gateway]]
+    name = "general"
+    enable=true
+
+    [[gateway.inout]]
+    account ="slack.forkbitpay"
+    channel = "general"    
+	
+    [[gateway.inout]]
+    account ="irc.freenode"
+    channel = "#btcpayserver"
+	
+    [[gateway.inout]]
+    account ="mattermost.btcpay"
+    channel = "town-square"
+	
+
+
+
+
+[[gateway]]
+    name = "support"
+    enable=true
+
+    [[gateway.inout]]
+    account ="slack.forkbitpay"
+    channel = "help"    
+	
+    [[gateway.inout]]
+    account ="mattermost.btcpay"
+    channel = "support"
+
+[[gateway]]
+    name = "dev"
+    enable=true
+
+    [[gateway.inout]]
+    account ="slack.forkbitpay"
+    channel = "dev"    
+	
+    [[gateway.inout]]
+    account ="mattermost.btcpay"
+    channel = "dev"
+
+[[gateway]]
+    name = "lightning"
+    enable=true
+
+    [[gateway.inout]]
+    account ="slack.forkbitpay"
+    channel = "lightning"    
+	
+    [[gateway.inout]]
+    account ="mattermost.btcpay"
+    channel = "lightning"
+
+[[gateway]]
+    name = "website"
+    enable=true
+
+    [[gateway.inout]]
+    account ="slack.forkbitpay"
+    channel = "website"    
+	
+    [[gateway.inout]]
+    account ="mattermost.btcpay"
+    channel = "website"
+	
+[[gateway]]
+    name = "translations"
+    enable=true
+
+    [[gateway.inout]]
+    account ="slack.forkbitpay"
+    channel = "translations"    
+	
+    [[gateway.inout]]
+    account ="mattermost.btcpay"
+    channel = "translations"
+    
+[[gateway]]
+    name = "internet-of-shit"
+    enable=true
+
+    [[gateway.inout]]
+    account ="slack.forkbitpay"
+    channel = "internetofshit"    
+	
+    [[gateway.inout]]
+    account ="mattermost.btcpay"
+    channel = "raspberry-pi"
+
+[[gateway]]
+    name = "offtopic"
+    enable=true
+
+    [[gateway.inout]]
+    account ="slack.forkbitpay"
+    channel = "random"    
+	
+    [[gateway.inout]]
+    account ="mattermost.btcpay"
+    channel = "off-topic"
+

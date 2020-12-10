@@ -1,0 +1,228 @@
+version: "3"
+
+services:
+  nginx:
+    restart: unless-stopped
+    image: nginx:stable
+    container_name: nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - "nginx_conf:/etc/nginx/conf.d"
+      - "nginx_vhost:/etc/nginx/vhost.d"
+      - "nginx_html:/usr/share/nginx/html"
+      - "nginx_certs:/etc/nginx/certs:ro"
+
+  nginx-gen:
+    restart: unless-stopped
+    image: btcpayserver/docker-gen:0.7.4
+    container_name: nginx-gen
+    volumes:
+      - "/var/run/docker.sock:/tmp/docker.sock:ro"
+      - "./nginx.tmpl:/etc/docker-gen/templates/nginx.tmpl:ro"
+      - "nginx_conf:/etc/nginx/conf.d"
+      - "nginx_vhost:/etc/nginx/vhost.d"
+      - "nginx_html:/usr/share/nginx/html"
+      - "nginx_certs:/etc/nginx/certs:ro"
+    entrypoint: /usr/local/bin/docker-gen -notify-sighup nginx -watch -wait 5s:30s /etc/docker-gen/templates/nginx.tmpl /etc/nginx/conf.d/default.conf
+    links:
+      - nginx
+      - slack
+
+  letsencrypt-nginx-proxy-companion:
+    restart: unless-stopped
+    image: btcpayserver/letsencrypt-nginx-proxy-companion:1.12.2
+    container_name: letsencrypt-nginx-proxy-companion
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - "nginx_conf:/etc/nginx/conf.d"
+      - "nginx_vhost:/etc/nginx/vhost.d"
+      - "nginx_html:/usr/share/nginx/html"
+      - "nginx_certs:/etc/nginx/certs:rw"
+    environment:
+      NGINX_DOCKER_GEN_CONTAINER: "nginx-gen"
+      NGINX_PROXY_CONTAINER: "nginx"
+      ACME_CA_URI: ${ACME_CA_URI:-https://acme-v01.api.letsencrypt.org/directory}
+    links:
+      - nginx-gen
+      - mattermost_app
+      - woocommerce_shop
+      - woocommerce_blog
+  slack:
+    image: nicolasdorier/slack-invite-automation:latest
+    restart: unless-stopped
+    container_name: slack
+    command: "node ./bin/www"
+    environment:
+      SLACK_URL: ${SLACK_URL:-forkbitpay.slack.com}
+      PORT: 80
+      COMMUNITY_NAME: "BTCPay Server"
+      SLACK_TOKEN: ${SLACK_TOKEN}
+      VIRTUAL_HOST: ${SLACK_HOST}
+      SSL_POLICY: "Mozilla-Modern"
+      VIRTUAL_PORT: "80"
+      VIRTUAL_NETWORK: "nginx-proxy"
+      LETSENCRYPT_HOST: ${SLACK_HOST}
+      LETSENCRYPT_EMAIL: ${LETSENCRYPT_EMAIL:-<no value>}
+    expose:
+      - 80
+  mattermost_db:
+    image: mattermost/mattermost-prod-db:5.25.0
+    volumes:
+      - mm-dbdata:/var/lib/postgresql/data
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      - POSTGRES_USER=mmuser
+      - POSTGRES_PASSWORD=mmuser_password
+      - POSTGRES_DB=mattermost
+    restart: unless-stopped
+    expose:
+      - 5432
+    links:
+        - mattermost_app
+  mattermost_app:
+    restart: unless-stopped
+    image: mattermost/mattermost-prod-app:5.25.0
+    volumes:
+      - mm-config:/mattermost/config:rw
+      - mm-data:/mattermost/data:rw
+      - mm-logs:/mattermost/logs:rw
+      - mm-plugins:/mattermost/plugins:rw
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      # use service's hostname
+      DB_HOST: "mattermost_db"
+      DB_PORT_NUMBER: 5432
+      MM_USERNAME: "mmuser"
+      MM_PASSWORD: "mmuser_password"
+      MM_DBNAME: "mattermost"
+      VIRTUAL_PORT: "8000"
+      VIRTUAL_HOST: ${MATTERMOST_HOST}
+      VIRTUAL_NETWORK: "nginx-proxy"
+      LETSENCRYPT_HOST: ${MATTERMOST_HOST}
+      LETSENCRYPT_EMAIL: ${LETSENCRYPT_EMAIL:-<no value>}
+      EDITION: "team"
+  mattermost_bridge:
+    restart: unless-stopped
+    image: 42wim/matterbridge:1.18.3
+    volumes:
+      - ./matterbridge.toml:/matterbridge.toml
+  woocommerce_shop:
+    restart: unless-stopped
+    image: btcpayserver/docker-woocommerce:3.0.6
+    environment:
+      WOOCOMMERCE_HOST: ${WOOCOMMERCE_SHOP_HOST}
+      WORDPRESS_DB_HOST: mariadb
+      WORDPRESS_DB_NAME: wordpress_shop
+      WORDPRESS_DB_USER: root
+      WORDPRESS_DB_PASSWORD: wordpressdb
+      LETSENCRYPT_HOST: ${WOOCOMMERCE_SHOP_HOST}
+      LETSENCRYPT_EMAIL: ${LETSENCRYPT_EMAIL:-<no value>}
+      VIRTUAL_HOST: ${WOOCOMMERCE_SHOP_HOST}
+    expose:
+      - 80
+    links:
+      - mariadb
+    volumes:
+      - "woocommerce_shop_html:/var/www/html"
+  woocommerce_blog:
+    restart: unless-stopped
+    image: btcpayserver/docker-woocommerce:3.0.6
+    environment:
+      WOOCOMMERCE_HOST: ${WOOCOMMERCE_BLOG_HOST}
+      WORDPRESS_DB_HOST: mariadb
+      WORDPRESS_DB_NAME: wordpress_blog
+      WORDPRESS_DB_USER: root
+      WORDPRESS_DB_PASSWORD: wordpressdb
+      LETSENCRYPT_HOST: ${WOOCOMMERCE_BLOG_HOST}
+      LETSENCRYPT_EMAIL: ${LETSENCRYPT_EMAIL:-<no value>}
+      VIRTUAL_HOST: ${WOOCOMMERCE_BLOG_HOST}
+    expose:
+      - 80
+    links:
+      - mariadb
+    volumes:
+      - "woocommerce_blog_html:/var/www/html"
+  sftp:
+    image: atmoz/sftp
+    ports:
+      - "2222:22"
+    links:
+      - woocommerce_blog
+    volumes:
+      - "./id_rsa.pub:/home/www-data/.ssh/keys/id_rsa.pub:ro"
+      - "./users.conf:/etc/sftp/users.conf:ro"
+      - "woocommerce_blog_html:/home/www-data/www"
+  mariadb:
+    restart: unless-stopped
+    image: mariadb:10.4
+    environment:
+      MYSQL_ROOT_PASSWORD: wordpressdb
+      MYSQL_USER: wordpress
+      MYSQL_PASSWORD: wordpress
+    expose:
+      - "3306"
+    volumes:
+      - "mariadb_datadir:/var/lib/mysql"
+    entrypoint:
+      sh -c "echo 'CREATE DATABASE IF NOT EXISTS wordpress_shop; CREATE DATABASE IF NOT EXISTS wordpress_blog;' > /docker-entrypoint-initdb.d/init.sql; /usr/local/bin/docker-entrypoint.sh --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci "
+  configurator:
+    restart: unless-stopped
+    image: btcpayserver/btcpayserver-configurator:0.0.22
+    environment:
+      LETSENCRYPT_HOST: ${CONFIGURATOR_HOST}
+      LETSENCRYPT_EMAIL: ${LETSENCRYPT_EMAIL:-<no value>}
+      VIRTUAL_HOST: ${CONFIGURATOR_HOST}
+    expose:
+      - "80"
+
+  fireflyiii:
+    image: jc5x/firefly-iii:latest
+    environment:
+      - APP_ENV=local
+      - APP_KEY=MustBe32DropDbAndChangeItIfUWant
+      - APP_URL=https://${FIREFLY_HOST}
+      - TRUSTED_PROXIES=**
+      - DB_CONNECTION=pgsql
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      # Need to manually create fireflyiii database since fireflyiii doesn't create it automatically
+      - DB_DATABASE=fireflyiii
+      - DB_USERNAME=postgres
+      - DB_PASSWORD=
+      - VIRTUAL_HOST_NAME=fireflyiii
+      - VIRTUAL_HOST=${FIREFLY_HOST}
+      - VIRTUAL_PORT=8080
+      - LETSENCRYPT_HOST=${FIREFLY_HOST}
+    expose:
+      - 8080
+    volumes:
+      - firefly_iii_export:/var/www/firefly-iii/storage/export
+      - firefly_iii_upload:/var/www/firefly-iii/storage/upload
+    depends_on:
+      - postgres
+
+  postgres:
+    restart: unless-stopped
+    image:  postgres:9.6.5
+    volumes:
+      - "postgres_datadir:/var/lib/postgresql/data"
+
+
+volumes:
+    nginx_conf:
+    nginx_vhost:
+    nginx_html:
+    nginx_certs:
+    mm-dbdata:
+    mm-config:
+    mm-data:
+    mm-logs:
+    mm-plugins:
+    woocommerce_shop_html:
+    woocommerce_blog_html:
+    mariadb_datadir:
+    firefly_iii_export:
+    firefly_iii_upload:
+    postgres_datadir:    
